@@ -6,138 +6,233 @@
 <title>Math Gesture Game</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;background:#0d0d1a;color:white;font-family:'Segoe UI',sans-serif;overflow:hidden}
-#root{width:100vw;height:100vh;display:flex;flex-direction:column;background:#0d0d1a}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',sans-serif}
 
-#startView{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px}
-#startView h1{font-size:2.4rem;font-weight:800;color:#a78bfa;text-shadow:0 0 30px rgba(124,58,237,0.5)}
-#startView .sub{font-size:0.9rem;color:#6b7280;text-align:center;max-width:360px;line-height:1.6}
-.nameIn{padding:12px 20px;border-radius:12px;border:1.5px solid #7c3aed;background:rgba(255,255,255,0.05);color:white;font-size:1rem;width:280px;text-align:center;outline:none}
+/* ===== CAMERA BACKGROUND ===== */
+#camBg{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0}
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1;pointer-events:none}
+
+/* ===== MOTION CANVAS (hand dot) ===== */
+#motionCvs{position:fixed;inset:0;width:100%;height:100%;transform:scaleX(-1);z-index:2;pointer-events:none}
+
+/* ===== GAME CANVAS ===== */
+#gCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:3;pointer-events:none}
+
+/* ===== UI LAYERS ===== */
+#ui{position:fixed;inset:0;z-index:4;pointer-events:none}
+
+/* HUD top bar */
+#hud{
+  position:absolute;top:0;left:0;right:0;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 24px;
+  background:linear-gradient(to bottom,rgba(0,0,0,0.75),transparent);
+  pointer-events:none;
+}
+#qDisp{
+  font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:900;
+  color:#fff;letter-spacing:3px;
+  text-shadow:0 2px 18px rgba(0,0,0,0.9);
+}
+#qDisp .op{color:#c4b5fd}
+.hudRight{display:flex;gap:10px;align-items:center}
+.pill{
+  background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);
+  border-radius:20px;padding:5px 14px;font-size:0.8rem;color:#e5e7eb;
+  backdrop-filter:blur(6px);
+}
+#lvlPill{color:#c4b5fd;border-color:rgba(167,139,250,0.45)}
+#streakPill{color:#fbbf24;border-color:rgba(251,191,36,0.4)}
+
+/* Bottom stats */
+#stats{
+  position:absolute;bottom:0;left:0;right:0;
+  display:flex;justify-content:space-between;align-items:flex-end;
+  padding:0 24px 16px;
+  background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);
+  pointer-events:none;
+}
+.statG{display:flex;gap:6px;align-items:flex-end}
+.stCard{
+  background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.15);
+  border-radius:12px;padding:7px 14px;text-align:center;backdrop-filter:blur(6px);
+}
+.stL{font-size:0.6rem;color:#9ca3af;text-transform:uppercase;letter-spacing:1px}
+.stV{font-size:1.3rem;font-weight:800;line-height:1.1}
+#tV{color:#f87171}#sV{color:#34d399}#lV{color:#f9a8d4}
+
+/* Timer bar */
+#progW{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,0.08)}
+#progB{height:100%;background:rgba(167,139,250,0.8);transition:width 0.8s linear}
+
+/* Side labels */
+.sideHint{
+  position:absolute;top:50%;transform:translateY(-50%);
+  font-size:0.85rem;color:rgba(255,255,255,0.35);
+  writing-mode:vertical-rl;letter-spacing:4px;text-transform:uppercase;
+  pointer-events:none;
+}
+#lHint{left:10px;transform:translateY(-50%) rotate(180deg)}
+#rHint{right:10px}
+
+/* Pause button */
+#pauseB{
+  position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  pointer-events:all;cursor:pointer;
+  background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);
+  border-radius:20px;padding:5px 18px;color:#d1d5db;font-size:0.8rem;
+  backdrop-filter:blur(6px);
+}
+#pauseB:hover{background:rgba(255,255,255,0.12)}
+
+/* Cam error */
+#camErr{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);
+  border-radius:12px;padding:14px 22px;text-align:center;color:#fca5a5;font-size:0.9rem;
+  display:none;backdrop-filter:blur(8px);
+}
+
+/* Hand cursor dot */
+#handDot{
+  position:fixed;width:32px;height:32px;border-radius:50%;
+  border:2.5px solid rgba(167,139,250,0.9);
+  background:rgba(167,139,250,0.25);
+  transform:translate(-50%,-50%);
+  pointer-events:none;z-index:5;
+  transition:left 0.05s,top 0.05s;
+  display:none;
+}
+#handDot.active{display:block}
+
+/* ===== VIEWS ===== */
+#startView,#goView{
+  position:fixed;inset:0;z-index:10;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;
+  background:rgba(0,0,0,0.72);backdrop-filter:blur(12px);
+}
+#startView h1{font-size:2.6rem;font-weight:900;color:#a78bfa;letter-spacing:-1px}
+.sub{font-size:0.9rem;color:#9ca3af;max-width:380px;text-align:center;line-height:1.7}
+.nameIn{
+  padding:12px 20px;border-radius:14px;
+  border:1.5px solid rgba(167,139,250,0.45);
+  background:rgba(255,255,255,0.07);color:white;
+  font-size:1rem;width:280px;text-align:center;outline:none;
+  backdrop-filter:blur(6px);
+}
 .nameIn::placeholder{color:#4b5563}
-.sBtn{padding:12px 32px;border-radius:12px;border:none;font-size:1rem;font-weight:600;cursor:pointer;transition:all 0.15s}
+.nameIn:focus{border-color:rgba(167,139,250,0.8)}
+.sBtn{
+  padding:12px 34px;border-radius:14px;border:none;
+  font-size:1rem;font-weight:700;cursor:pointer;
+  transition:all 0.15s;
+}
 .sBtnP{background:#7c3aed;color:white}
-.sBtnP:hover{background:#6d28d9;transform:translateY(-2px);box-shadow:0 8px 20px rgba(124,58,237,0.4)}
-.sBtnS{background:rgba(255,255,255,0.07);color:#d1d5db;border:1px solid rgba(255,255,255,0.15)}
-.sBtnS:hover{background:rgba(255,255,255,0.12)}
-.camNote{font-size:0.75rem;color:#4b5563;max-width:320px;text-align:center;line-height:1.5}
+.sBtnP:hover{background:#6d28d9;transform:translateY(-2px);box-shadow:0 10px 25px rgba(124,58,237,0.45)}
+.sBtnS{background:rgba(255,255,255,0.09);color:#d1d5db;border:1px solid rgba(255,255,255,0.18)}
+.sBtnS:hover{background:rgba(255,255,255,0.15)}
+.note{font-size:0.75rem;color:#4b5563;max-width:300px;text-align:center;line-height:1.5}
 
-#gameView{display:none;flex-direction:row;height:100vh}
-
-#camSide{width:200px;flex-shrink:0;padding:10px;display:flex;flex-direction:column;gap:8px;border-right:1px solid rgba(255,255,255,0.07);overflow:hidden}
-#camSide h3{font-size:0.72rem;color:#7c3aed;letter-spacing:1px;text-transform:uppercase}
-#vWrap{position:relative;border-radius:10px;overflow:hidden;background:#111;aspect-ratio:4/3}
-#camVid{width:100%;display:block;transform:scaleX(-1)}
-#motionCvs{position:absolute;top:0;left:0;width:100%;height:100%;transform:scaleX(-1);pointer-events:none}
-#camErr{font-size:0.72rem;color:#f87171;text-align:center;padding:6px;background:rgba(248,113,113,0.1);border-radius:8px}
-#gStatus{background:rgba(255,255,255,0.04);border-radius:8px;padding:8px;text-align:center}
-#gIcon{font-size:1.6rem;display:block}
-#gLabel{font-size:0.72rem;color:#9ca3af;margin-top:2px}
-.statB{background:rgba(255,255,255,0.04);border-radius:8px;padding:8px 10px}
-.statL{font-size:0.65rem;color:#6b7280;text-transform:uppercase;letter-spacing:1px}
-.statV{font-size:1.3rem;font-weight:700;margin-top:1px}
-#tV{color:#f87171}#sV{color:#34d399}#lV{color:#fb923c}#stV{color:#fbbf24}
-.statRow{display:flex;gap:8px}
-#pauseB{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#d1d5db;cursor:pointer;font-size:0.8rem;width:100%}
-#pauseB:hover{background:rgba(255,255,255,0.1)}
-
-#mainArea{flex:1;position:relative;overflow:hidden}
-#gCanvas{position:absolute;inset:0;width:100%;height:100%}
-#hud{position:absolute;top:0;left:0;right:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(13,13,26,0.95),transparent);z-index:10}
-#qDisp{font-size:1.8rem;font-weight:800;letter-spacing:2px;color:white}
-#qDisp .op{color:#a78bfa}
-#lvlB{background:rgba(124,58,237,0.25);border:1px solid rgba(124,58,237,0.5);border-radius:20px;padding:4px 14px;font-size:0.78rem;color:#c4b5fd}
-.sideL{position:absolute;bottom:55px;font-size:0.75rem;color:rgba(255,255,255,0.2);z-index:5;pointer-events:none;line-height:1.8}
-#lL{left:10px}#rL{right:10px;text-align:right}
-#progW{position:absolute;bottom:0;left:0;right:0;height:4px;background:rgba(255,255,255,0.06)}
-#progB{height:100%;background:#7c3aed;transition:width 0.8s linear}
-#hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:0.72rem;color:rgba(255,255,255,0.18);white-space:nowrap;z-index:10}
-
-#goView{display:none;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px}
-#goView h2{font-size:2rem;font-weight:700}
-#fscore{font-size:4rem;font-weight:900;color:#a78bfa;text-shadow:0 0 30px rgba(124,58,237,0.6)}
+#goView{display:none}
+#goView h2{font-size:2rem;font-weight:700;color:white}
+#fscore{font-size:4.5rem;font-weight:900;color:#a78bfa;text-shadow:0 0 30px rgba(124,58,237,0.5)}
 #fdet{font-size:0.9rem;color:#6b7280}
-.bRow{display:flex;gap:12px;margin-top:6px}
-
-/* Swipe flash overlay */
-#flashL,#flashR{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 0.12s;z-index:20}
-#flashL{background:linear-gradient(to right,rgba(99,102,241,0.35),transparent)}
-#flashR{background:linear-gradient(to left,rgba(234,88,12,0.35),transparent)}
+.bRow{display:flex;gap:12px;margin-top:8px}
 </style>
 </head>
 <body>
-<div id="root">
 
-  <!-- START -->
-  <div id="startView">
-    <h1>🧮 Math Gesture Game</h1>
-    <p class="sub">เลขตกมาสองฝั่ง — โบกมือซ้าย/ขวาผ่านกล้องเพื่อเลือกคำตอบ</p>
-    <input class="nameIn" id="nameIn" placeholder="ชื่อผู้เล่น" maxlength="20"/>
-    <button class="sBtn sBtnP" id="startCamBtn">📷 เปิดกล้อง + เริ่มเล่น</button>
-    <button class="sBtn sBtnS" id="startNoCamBtn">🖱 เล่นแบบคลิก / คีย์บอร์ด</button>
-    <p class="camNote">← → Arrow keys หรือคลิกซ้าย/ขวาใช้ได้เสมอ แม้ไม่เปิดกล้อง</p>
-  </div>
+<!-- Camera as full-screen background -->
+<video id="camBg" autoplay muted playsinline></video>
+<div id="overlay"></div>
+<canvas id="motionCvs"></canvas>
+<canvas id="gCanvas"></canvas>
+<div id="handDot"></div>
 
-  <!-- GAME -->
-  <div id="gameView">
-    <div id="camSide">
-      <h3>📷 กล้อง</h3>
-      <div id="vWrap">
-        <video id="camVid" autoplay muted playsinline></video>
-        <canvas id="motionCvs"></canvas>
-      </div>
-      <div id="camErr" style="display:none">ไม่พบกล้อง — ใช้คีย์บอร์ดแทนได้</div>
-      <div id="gStatus">
-        <span id="gIcon">👋</span>
-        <div id="gLabel">รอการเคลื่อนไหว...</div>
-      </div>
-      <div class="statB"><div class="statL">⏱ เวลา</div><div class="statV" id="tV">60</div></div>
-      <div class="statB"><div class="statL">⭐ คะแนน</div><div class="statV" id="sV">0</div></div>
-      <div class="statRow">
-        <div class="statB" style="flex:1"><div class="statL">❤️</div><div class="statV" id="lV">3</div></div>
-        <div class="statB" style="flex:1"><div class="statL">🔥</div><div class="statV" id="stV">0</div></div>
-      </div>
-      <button id="pauseB">⏸ หยุด</button>
-    </div>
-
-    <div id="mainArea">
-      <div id="flashL"></div><div id="flashR"></div>
-      <div id="hud">
-        <div id="qDisp">–</div>
-        <div id="lvlB">Level 1</div>
-      </div>
-      <canvas id="gCanvas"></canvas>
-      <div class="sideL" id="lL">👈<br>ซ้าย</div>
-      <div class="sideL" id="rL">👉<br>ขวา</div>
-      <div id="hint">← คลิก / กดลูกศร / โบกมือ →</div>
-      <div id="progW"><div id="progB" style="width:100%"></div></div>
+<!-- Game UI -->
+<div id="ui">
+  <div id="hud" style="display:none">
+    <div id="qDisp">–</div>
+    <div class="hudRight">
+      <div class="pill" id="streakPill">🔥 0</div>
+      <div class="pill" id="lvlPill">Lv 1</div>
     </div>
   </div>
-
-  <!-- GAME OVER -->
-  <div id="goView">
-    <h2 id="goTitle">หมดเวลา! ⏰</h2>
-    <div id="fscore">0</div>
-    <div id="fdet">–</div>
-    <div class="bRow">
-      <button class="sBtn sBtnP" id="reBtn">🔄 เล่นอีกรอบ</button>
-      <button class="sBtn sBtnS" id="homeBtn">🏠 หน้าหลัก</button>
+  <div class="sideHint" id="lHint">ซ้าย</div>
+  <div class="sideHint" id="rHint">ขวา</div>
+  <div id="stats" style="display:none">
+    <div class="statG">
+      <div class="stCard"><div class="stL">⏱ เวลา</div><div class="stV" id="tV">60</div></div>
+      <div class="stCard"><div class="stL">⭐ คะแนน</div><div class="stV" id="sV">0</div></div>
     </div>
+    <div class="stCard"><div class="stL">❤️ ชีวิต</div><div class="stV" id="lV">❤️❤️❤️</div></div>
+    <button id="pauseB" style="position:relative;top:auto;left:auto;transform:none;pointer-events:all">⏸ หยุด</button>
+  </div>
+  <div id="progW" style="display:none"><div id="progB" style="width:100%"></div></div>
+  <div id="camErr">📵 ไม่พบกล้อง — กด ← → แทนได้</div>
+</div>
+
+<!-- Start Screen -->
+<div id="startView">
+  <h1>🧮 Math Gesture</h1>
+  <p class="sub">เลขตกลงมาบนภาพกล้อง — เอามือแตะเลขที่ถูกต้องเลย!</p>
+  <input class="nameIn" id="nameIn" placeholder="ชื่อผู้เล่น" maxlength="20"/>
+  <button class="sBtn sBtnP" id="startCamBtn">📷 เปิดกล้อง + เริ่มเล่น</button>
+  <button class="sBtn sBtnS" id="startNoCamBtn">🖱 คลิก / คีย์บอร์ด</button>
+  <p class="note">← → Arrow keys หรือคลิกซ้าย/ขวาก็ใช้ได้</p>
+</div>
+
+<!-- Game Over -->
+<div id="goView">
+  <h2 id="goTitle">หมดเวลา! ⏰</h2>
+  <div id="fscore">0</div>
+  <div id="fdet">–</div>
+  <div class="bRow">
+    <button class="sBtn sBtnP" id="reBtn">🔄 เล่นอีกรอบ</button>
+    <button class="sBtn sBtnS" id="homeBtn">🏠 หน้าหลัก</button>
   </div>
 </div>
 
 <script>
-const GTIME=60,MLIVES=3,SPEEDS=[1.4,2.0,2.6,3.2];
-let state='idle',score=0,lives=MLIVES,streak=0,timer=GTIME,level=1,corr=0,wrng=0;
-let maxStreak=0,numbers=[],effects=[],question=null,paused=false,tid=null,fid=null;
-let useCam=false,camStream=null,gestureInt=null,gCool=0,prevFrame=null,ghist=[];
+// ============================================================
+// CONFIG
+// ============================================================
+const GTIME=60, MLIVES=3, SPEEDS=[1.4,2.0,2.6,3.2];
+
+// ============================================================
+// STATE
+// ============================================================
+let state='idle', score=0, lives=MLIVES, streak=0, timer=GTIME;
+let level=1, corr=0, wrng=0, maxStreak=0;
+let numbers=[], effects=[], question=null, paused=false;
+let tid=null, fid=null;
+let useCam=false, camStream=null, gestureInt=null;
+let gCool=0, prevFrame=null, ghist=[];
 let playerName='Player';
+// Hand position (in screen coords, mirrored)
+let handX=-1, handY=-1, handVisible=false;
 
-const canvas=document.getElementById('gCanvas'),ctx=canvas.getContext('2d');
-const mcvs=document.getElementById('motionCvs'),mctx=mcvs.getContext('2d');
+// ============================================================
+// CANVAS SETUP
+// ============================================================
+const canvas=document.getElementById('gCanvas');
+const ctx=canvas.getContext('2d');
+const mcvs=document.getElementById('motionCvs');
+const mctx=mcvs.getContext('2d');
 
-function resz(){const a=document.getElementById('mainArea');canvas.width=a.clientWidth;canvas.height=a.clientHeight;}
+function resz(){
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+  mcvs.width=window.innerWidth;
+  mcvs.height=window.innerHeight;
+}
 window.addEventListener('resize',resz);
+resz();
 
+// ============================================================
+// MATH
+// ============================================================
 const rand=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
 function genQ(){
@@ -151,136 +246,346 @@ function genQ(){
   return{a,b,op,ans};
 }
 
-function genChoices(ans){
+function genWrong(ans){
   const s=new Set([ans]);
-  while(s.size<6){const d=rand(-Math.max(3,Math.floor(ans*.35)),Math.max(3,Math.floor(ans*.35)));const c=ans+d;if(c!==ans&&c>=0)s.add(c);}
-  return[...s].sort(()=>Math.random()-.5);
+  while(s.size<8){
+    const d=rand(-Math.max(4,Math.floor(ans*.4)),Math.max(4,Math.floor(ans*.4)));
+    const c=ans+d;if(c!==ans&&c>=0)s.add(c);
+  }
+  return[...s].filter(x=>x!==ans)[rand(0,6)];
 }
 
+// ============================================================
+// NUMBER BLOCKS
+// ============================================================
 class Num{
   constructor(val,side,ok){
-    this.val=val;this.side=side;this.ok=ok;
-    const w=canvas.width;
-    this.x=side==='left'?rand(10,w/2-90):rand(w/2+10,w-100);
-    this.y=-55;this.w=78;this.h=48;
-    this.spd=SPEEDS[Math.min(level-1,3)]+Math.random()*.7;
-    this.alpha=1;this.shk=0;this.t=0;this.dead=false;
+    this.val=val; this.side=side; this.ok=ok;
+    const W=canvas.width, H=canvas.height;
+    this.w=84; this.h=52;
+    // Spread across left or right half, avoid edges
+    if(side==='left'){
+      this.x=rand(30,W/2-this.w-20);
+    }else{
+      this.x=rand(W/2+20,W-this.w-30);
+    }
+    this.y=-this.h-10;
+    this.spd=SPEEDS[Math.min(level-1,3)]+Math.random()*0.8;
+    this.alpha=1; this.shk=0; this.t=0; this.dead=false;
+    this.hitAnim=0;
+  }
+  get cx(){return this.x+this.w/2;}
+  get cy(){return this.y+this.h/2;}
+  // Check if hand is touching this block
+  isTouched(){
+    if(!handVisible||handX<0)return false;
+    const pad=18;
+    return handX>this.x-pad && handX<this.x+this.w+pad &&
+           handY>this.y-pad && handY<this.y+this.h+pad;
   }
   update(){
-    this.y+=this.spd;this.t+=0.1;
+    this.y+=this.spd; this.t+=0.08;
     if(this.shk>0)this.shk--;
-    if(this.y>canvas.height+70){this.dead=true;if(this.ok)loseLife();}
+    if(this.hitAnim>0)this.hitAnim--;
+    if(this.y>canvas.height+80){this.dead=true;if(this.ok)loseLife();}
   }
   draw(){
-    const ox=this.x+(this.shk?(Math.random()-.5)*6:0),oy=this.y;
-    const g=.5+.5*Math.sin(this.t);
-    ctx.save();ctx.globalAlpha=this.alpha;
-    ctx.shadowBlur=14+g*7;
-    ctx.shadowColor=this.side==='left'?'rgba(99,102,241,0.75)':'rgba(234,88,12,0.75)';
+    const ox=this.x+(this.shk?(Math.random()-.5)*6:0), oy=this.y;
+    const pulse=0.5+0.5*Math.sin(this.t);
+    const touched=this.isTouched();
+
+    ctx.save();
+    ctx.globalAlpha=this.alpha;
+
+    // Glow when hand is near
+    if(touched){
+      ctx.shadowBlur=28;
+      ctx.shadowColor=this.ok?'rgba(52,211,153,0.9)':'rgba(248,113,113,0.9)';
+    }else{
+      ctx.shadowBlur=12+pulse*6;
+      ctx.shadowColor=this.side==='left'?'rgba(99,102,241,0.6)':'rgba(234,88,12,0.6)';
+    }
+
+    // Background
     const gr=ctx.createLinearGradient(ox,oy,ox,oy+this.h);
-    if(this.side==='left'){gr.addColorStop(0,'rgba(99,102,241,0.93)');gr.addColorStop(1,'rgba(67,56,202,0.97)');}
-    else{gr.addColorStop(0,'rgba(234,88,12,0.93)');gr.addColorStop(1,'rgba(194,65,12,0.97)');}
-    ctx.fillStyle=gr;rr(ctx,ox,oy,this.w,this.h,24);ctx.fill();
+    if(touched){
+      if(this.ok){gr.addColorStop(0,'rgba(52,211,153,0.9)');gr.addColorStop(1,'rgba(16,185,129,0.95)');}
+      else{gr.addColorStop(0,'rgba(248,113,113,0.9)');gr.addColorStop(1,'rgba(220,38,38,0.95)');}
+    }else if(this.side==='left'){
+      gr.addColorStop(0,'rgba(99,102,241,0.88)');gr.addColorStop(1,'rgba(67,56,202,0.93)');
+    }else{
+      gr.addColorStop(0,'rgba(234,88,12,0.88)');gr.addColorStop(1,'rgba(194,65,12,0.93)');
+    }
+    ctx.fillStyle=gr;
+    rr(ctx,ox,oy,this.w,this.h,26);ctx.fill();
+
+    // Border
     ctx.shadowBlur=0;
-    ctx.strokeStyle=this.side==='left'?'rgba(165,180,252,0.65)':'rgba(253,186,116,0.65)';
-    ctx.lineWidth=1.5;rr(ctx,ox,oy,this.w,this.h,24);ctx.stroke();
+    ctx.strokeStyle=touched?'rgba(255,255,255,0.9)':
+      (this.side==='left'?'rgba(165,180,252,0.5)':'rgba(253,186,116,0.5)');
+    ctx.lineWidth=touched?2:1.5;
+    rr(ctx,ox,oy,this.w,this.h,26);ctx.stroke();
+
+    // Number text
     ctx.fillStyle='white';
-    ctx.font=`bold ${this.val>99?15:20}px 'Segoe UI',sans-serif`;
+    ctx.font=`bold ${this.val>99?16:20}px 'Segoe UI',sans-serif`;
     ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowBlur=0;
     ctx.fillText(this.val,ox+this.w/2,oy+this.h/2);
     ctx.restore();
   }
 }
 
+// ============================================================
+// FX PARTICLES
+// ============================================================
 class Fx{
-  constructor(x,y,txt,col){this.x=x;this.y=y;this.txt=txt;this.col=col;this.vy=-2.8;this.a=1.3;this.sc=1.5;}
-  update(){this.y+=this.vy;this.a-=0.032;this.sc=Math.max(1,this.sc-.022);}
+  constructor(x,y,txt,col){
+    this.x=x;this.y=y;this.txt=txt;this.col=col;
+    this.vy=-3.2;this.a=1.4;this.sc=1.8;
+  }
+  update(){this.y+=this.vy;this.a-=0.028;this.sc=Math.max(1,this.sc-0.02);}
   draw(){
     if(this.a<=0)return;
-    ctx.save();ctx.globalAlpha=Math.min(1,this.a);ctx.fillStyle=this.col;
-    ctx.font=`bold ${Math.round(21*this.sc)}px 'Segoe UI'`;
-    ctx.textAlign='center';ctx.shadowBlur=10;ctx.shadowColor=this.col;
-    ctx.fillText(this.txt,this.x,this.y);ctx.restore();
+    ctx.save();
+    ctx.globalAlpha=Math.min(1,this.a);
+    ctx.fillStyle=this.col;
+    ctx.font=`bold ${Math.round(22*this.sc)}px 'Segoe UI'`;
+    ctx.textAlign='center';
+    ctx.shadowBlur=12;ctx.shadowColor=this.col;
+    ctx.fillText(this.txt,this.x,this.y);
+    ctx.restore();
   }
   get dead(){return this.a<=0;}
 }
 
 function rr(c,x,y,w,h,r){
-  c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.arcTo(x+w,y,x+w,y+h,r);
-  c.lineTo(x+w,y+h-r);c.arcTo(x+w,y+h,x,y+h,r);c.lineTo(x+r,y+h);
-  c.arcTo(x,y+h,x,y,r);c.lineTo(x,y+r);c.arcTo(x,y,x+w,y,r);c.closePath();
+  c.beginPath();
+  c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.arcTo(x+w,y,x+w,y+h,r);
+  c.lineTo(x+w,y+h-r);c.arcTo(x+w,y+h,x,y+h,r);
+  c.lineTo(x+r,y+h);c.arcTo(x,y+h,x,y,r);
+  c.lineTo(x,y+r);c.arcTo(x,y,x+w,y,r);
+  c.closePath();
 }
 
-let spT=0;
+// ============================================================
+// GAME LOGIC
+// ============================================================
+let spawnCd=0;
+
 function spawn(){
   if(!question)return;
-  const cs=Math.random()<.5?'left':'right',ws=cs==='left'?'right':'left';
-  const wrong=genChoices(question.ans).find(c=>c!==question.ans);
+  const cs=Math.random()<.5?'left':'right';
+  const ws=cs==='left'?'right':'left';
+  const wrong=genWrong(question.ans);
   numbers.push(new Num(question.ans,cs,true));
-  numbers.push(new Num(wrong??question.ans-1,ws,false));
+  numbers.push(new Num(wrong,ws,false));
 }
 
-function nextQ(){numbers=[];question=genQ();spT=0;spawn();updateHUD();}
-
-function flash(side){
-  const el=document.getElementById(side==='left'?'flashL':'flashR');
-  el.style.opacity='1';setTimeout(()=>el.style.opacity='0',180);
+function nextQ(){
+  numbers=[];question=genQ();spawnCd=0;spawn();updateHUD();
 }
 
 function choose(side){
   if(state!=='playing'||paused)return;
-  flash(side);
   const n=numbers.find(x=>x.side===side&&!x.dead);
   if(!n)return;
   if(n.ok){
     streak++;if(streak>maxStreak)maxStreak=streak;
-    const bonus=streak>=3?streak:1;score+=10*bonus;corr++;
-    effects.push(new Fx(n.x+n.w/2,n.y,streak>=3?`+${10*bonus} ×${streak}`:`+10 ✓`,'#34d399'));
-    n.dead=true;level=Math.min(4,1+Math.floor(corr/8));
-    document.getElementById('lvlB').textContent='Level '+level;
+    const bonus=streak>=3?streak:1;
+    score+=10*bonus;corr++;
+    effects.push(new Fx(n.cx,n.cy,streak>=3?`+${10*bonus} ×${streak}!`:`+10 ✓`,'#34d399'));
+    n.dead=true;
+    level=Math.min(4,1+Math.floor(corr/8));
     nextQ();
   }else{
     streak=0;wrng++;n.shk=10;
-    effects.push(new Fx(n.x+n.w/2,n.y,'✗ ผิด!','#f87171'));
+    effects.push(new Fx(n.cx,n.cy,'✗ ผิด!','#f87171'));
     loseLife();
   }
   updateHUD();
 }
 
-function loseLife(){lives--;updateHUD();if(lives<=0)endGame('dead');}
+// Hand-touch checking (called every frame)
+function checkHandTouch(){
+  if(!handVisible||gCool>0)return;
+  for(const n of numbers){
+    if(n.dead)continue;
+    if(n.isTouched()){
+      choose(n.side);
+      gCool=25;
+      return;
+    }
+  }
+}
+
+function loseLife(){
+  lives--;updateHUD();
+  if(lives<=0)endGame('dead');
+}
 
 function updateHUD(){
   if(!question)return;
   const om={'+':'+','-':'−','×':'×','÷':'÷'};
-  document.getElementById('qDisp').innerHTML=`${question.a} <span class="op">${om[question.op]}</span> ${question.b} = <span class="op">?</span>`;
+  document.getElementById('qDisp').innerHTML=
+    `${question.a} <span class="op">${om[question.op]}</span> ${question.b} = <span class="op">?</span>`;
   document.getElementById('sV').textContent=score;
   document.getElementById('lV').textContent='❤️'.repeat(Math.max(0,lives));
-  document.getElementById('stV').textContent=streak;
   document.getElementById('tV').textContent=timer;
+  document.getElementById('streakPill').textContent=`🔥 ${streak}`;
+  document.getElementById('lvlPill').textContent=`Lv ${level}`;
   document.getElementById('progB').style.width=(timer/GTIME*100)+'%';
 }
 
+// ============================================================
+// GAME LOOP
+// ============================================================
 function loop(){
   if(state!=='playing')return;
   fid=requestAnimationFrame(loop);
   if(paused)return;
-  spT++;
-  if(numbers.length===0||(spT>110&&numbers.every(n=>n.dead))){spawn();spT=0;}
-  numbers.forEach(n=>n.update());numbers=numbers.filter(n=>!n.dead);
-  effects.forEach(e=>e.update());effects=effects.filter(e=>!e.dead);
+
+  if(gCool>0)gCool--;
+  spawnCd++;
+  if(numbers.length===0||(spawnCd>120&&numbers.every(n=>n.dead))){
+    spawn();spawnCd=0;
+  }
+
+  numbers.forEach(n=>n.update());
+  numbers=numbers.filter(n=>!n.dead);
+  effects.forEach(e=>e.update());
+  effects=effects.filter(e=>!e.dead);
+
+  // Check hand touch
+  if(useCam)checkHandTouch();
+
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.save();ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;ctx.setLineDash([5,12]);
-  ctx.beginPath();ctx.moveTo(canvas.width/2,55);ctx.lineTo(canvas.width/2,canvas.height-15);ctx.stroke();ctx.restore();
-  numbers.forEach(n=>n.draw());effects.forEach(e=>e.draw());
+
+  // Divider line
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,0.12)';
+  ctx.lineWidth=1;
+  ctx.setLineDash([6,14]);
+  ctx.beginPath();
+  ctx.moveTo(canvas.width/2,60);
+  ctx.lineTo(canvas.width/2,canvas.height-50);
+  ctx.stroke();
+  ctx.restore();
+
+  numbers.forEach(n=>n.draw());
+  effects.forEach(e=>e.draw());
 }
 
+// ============================================================
+// CAMERA & MOTION DETECTION
+// ============================================================
+async function startCam(){
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:1280},height:{ideal:720},facingMode:'user'}
+    });
+    const v=document.getElementById('camBg');
+    v.srcObject=camStream;
+    await v.play();
+    document.getElementById('camErr').style.display='none';
+    prevFrame=null;ghist=[];
+    gestureInt=setInterval(processFrame,45);
+  }catch(e){
+    document.getElementById('camErr').style.display='block';
+    useCam=false;
+  }
+}
+
+function processFrame(){
+  const v=document.getElementById('camBg');
+  if(v.readyState<2||!v.videoWidth)return;
+
+  const W=canvas.width, H=canvas.height;
+  const vW=v.videoWidth, vH=v.videoHeight;
+
+  // Draw video frame to motion canvas (same size as screen)
+  mctx.drawImage(v,0,0,W,H);
+  const curr=mctx.getImageData(0,0,W,H);
+  mctx.clearRect(0,0,W,H);
+
+  if(!prevFrame){prevFrame=curr;return;}
+
+  const d1=prevFrame.data, d2=curr.data;
+  let sumX=0, sumY=0, cnt=0;
+
+  // Sample every 3rd pixel for performance
+  for(let py=0;py<H;py+=3){
+    for(let px=0;px<W;px+=3){
+      const i=(py*W+px)*4;
+      const diff=Math.abs(d2[i]-d1[i])+Math.abs(d2[i+1]-d1[i+1])+Math.abs(d2[i+2]-d1[i+2]);
+      if(diff>40){sumX+=px;sumY+=py;cnt++;}
+    }
+  }
+
+  if(cnt>300){
+    // Raw centroid of motion (in canvas coords, video is mirrored so x is already correct)
+    let cx=sumX/cnt;
+    let cy=sumY/cnt;
+
+    // Mirror x to match mirrored video
+    cx=W-cx;
+
+    // Update hand position
+    handX=cx; handY=cy; handVisible=true;
+
+    // Move hand dot UI element
+    const dot=document.getElementById('handDot');
+    dot.classList.add('active');
+    dot.style.left=cx+'px';
+    dot.style.top=cy+'px';
+
+    // Draw motion circle on canvas layer (will be covered by game canvas)
+    // We just use the handDot div instead
+
+    ghist.push({x:cx,y:cy});
+    if(ghist.length>6)ghist.shift();
+
+  }else{
+    handVisible=false;
+    ghist=[];
+    document.getElementById('handDot').classList.remove('active');
+    // Fade out
+    handX=-1;handY=-1;
+  }
+
+  prevFrame=curr;
+}
+
+function stopCam(){
+  clearInterval(gestureInt);gestureInt=null;
+  prevFrame=null;ghist=[];
+  handVisible=false;handX=-1;handY=-1;
+  document.getElementById('handDot').classList.remove('active');
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+}
+
+// ============================================================
+// START / END
+// ============================================================
 function startGame(){
-  score=0;lives=MLIVES;streak=0;maxStreak=0;timer=GTIME;level=1;corr=0;wrng=0;paused=false;
-  numbers=[];effects=[];state='playing';
+  score=0;lives=MLIVES;streak=0;maxStreak=0;
+  timer=GTIME;level=1;corr=0;wrng=0;paused=false;
+  numbers=[];effects=[];state='playing';spawnCd=0;gCool=0;
   resz();nextQ();
+
+  document.getElementById('hud').style.display='flex';
+  document.getElementById('stats').style.display='flex';
+  document.getElementById('progW').style.display='block';
+
   clearInterval(tid);
-  tid=setInterval(()=>{if(paused||state!=='playing')return;timer--;updateHUD();if(timer<=0)endGame('time');},1000);
+  tid=setInterval(()=>{
+    if(paused||state!=='playing')return;
+    timer--;updateHUD();
+    if(timer<=0)endGame('time');
+  },1000);
+
   cancelAnimationFrame(fid);loop();
+
   if(useCam)startCam();
 }
 
@@ -289,7 +594,10 @@ function endGame(r){
   document.getElementById('goTitle').textContent=r==='time'?'⏰ หมดเวลา!':'💔 ชีวิตหมด!';
   document.getElementById('fscore').textContent=score;
   document.getElementById('fdet').textContent=`ถูก ${corr}  ผิด ${wrng}  Streak สูงสุด ${maxStreak}  Level ${level}`;
-  show('goView');
+  document.getElementById('goView').style.display='flex';
+  document.getElementById('hud').style.display='none';
+  document.getElementById('stats').style.display='none';
+  document.getElementById('progW').style.display='none';
   saveScore();
 }
 
@@ -303,99 +611,63 @@ function saveScore(){
   }catch(e){}
 }
 
-// ---- CAMERA ----
-async function startCam(){
-  try{
-    camStream=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240,facingMode:'user'}});
-    const v=document.getElementById('camVid');
-    v.srcObject=camStream;await v.play();
-    document.getElementById('camErr').style.display='none';
-    mcvs.width=v.videoWidth||320;mcvs.height=v.videoHeight||240;
-    prevFrame=null;ghist=[];
-    gestureInt=setInterval(()=>{if(gCool>0){gCool--;return;}processFrame();},55);
-  }catch(e){
-    document.getElementById('camErr').style.display='block';
-    document.getElementById('gIcon').textContent='📵';
-    document.getElementById('gLabel').textContent='ไม่พบกล้อง';
-  }
-}
-
-function processFrame(){
-  const v=document.getElementById('camVid');
-  if(v.readyState<2||!v.videoWidth)return;
-  const w=mcvs.width,h=mcvs.height;
-  mctx.drawImage(v,0,0,w,h);
-  const curr=mctx.getImageData(0,0,w,h);
-  if(!prevFrame){prevFrame=curr;return;}
-  let sumX=0,cnt=0;
-  const d1=prevFrame.data,d2=curr.data;
-  for(let i=0;i<d2.length;i+=12){
-    const diff=Math.abs(d2[i]-d1[i])+Math.abs(d2[i+1]-d1[i+1])+Math.abs(d2[i+2]-d1[i+2]);
-    if(diff>42){sumX+=((i/4)%w);cnt++;}
-  }
-  mctx.clearRect(0,0,w,h);
-  if(cnt>700){
-    const cx=sumX/cnt;
-    mctx.beginPath();mctx.arc(cx,h/2,18,0,Math.PI*2);
-    mctx.fillStyle='rgba(167,139,250,0.55)';mctx.fill();
-    mctx.beginPath();mctx.arc(cx,h/2,24,0,Math.PI*2);
-    mctx.strokeStyle='rgba(167,139,250,0.3)';mctx.lineWidth=2;mctx.stroke();
-    ghist.push(cx);
-    if(ghist.length>7)ghist.shift();
-    if(ghist.length>=7){
-      const delta=ghist[ghist.length-1]-ghist[0];
-      if(Math.abs(delta)>w*.21){
-        const dir=delta<0?'right':'left';
-        document.getElementById('gIcon').textContent=dir==='left'?'👈':'👉';
-        document.getElementById('gLabel').textContent=dir==='left'?'โบกซ้าย!':'โบกขวา!';
-        choose(dir);gCool=22;ghist=[];
-        setTimeout(()=>{document.getElementById('gIcon').textContent='👋';document.getElementById('gLabel').textContent='รอการเคลื่อนไหว...';},550);
-      }
-    }
-  }else{ghist=[];}
-  prevFrame=curr;
-}
-
-function stopCam(){
-  clearInterval(gestureInt);gestureInt=null;prevFrame=null;ghist=[];
-  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
-}
-
-function show(id){
-  document.getElementById('startView').style.display='none';
-  document.getElementById('gameView').style.display='none';
-  document.getElementById('goView').style.display='none';
-  const el=document.getElementById(id);
-  el.style.display='flex';
-  if(id==='gameView')resz();
-}
-
-// ---- EVENTS ----
-document.getElementById('startCamBtn').onclick=()=>{
-  playerName=document.getElementById('nameIn').value.trim()||'Player';
-  useCam=true;show('gameView');startGame();
-};
-document.getElementById('startNoCamBtn').onclick=()=>{
-  playerName=document.getElementById('nameIn').value.trim()||'Player';
-  useCam=false;show('gameView');startGame();
-  document.getElementById('vWrap').style.display='none';
-  document.getElementById('gLabel').textContent='ใช้คลิก/คีย์บอร์ด';
-};
-document.getElementById('pauseB').onclick=()=>{
-  paused=!paused;document.getElementById('pauseB').textContent=paused?'▶ ต่อ':'⏸ หยุด';
-};
-document.getElementById('reBtn').onclick=()=>{show('gameView');startGame();};
-document.getElementById('homeBtn').onclick=()=>{stopCam();state='idle';clearInterval(tid);cancelAnimationFrame(fid);show('startView');};
-
-document.getElementById('mainArea').addEventListener('click',e=>{
+// ============================================================
+// CLICK CONTROL (click left/right half of screen)
+// ============================================================
+document.addEventListener('click',e=>{
+  // Ignore clicks on UI buttons
+  if(e.target.closest('#ui button, #startView, #goView'))return;
   if(state!=='playing')return;
-  choose(e.offsetX<e.currentTarget.clientWidth/2?'left':'right');
+  choose(e.clientX<window.innerWidth/2?'left':'right');
 });
+
+// ============================================================
+// KEYBOARD
+// ============================================================
 window.addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft'){e.preventDefault();choose('left');}
   if(e.key==='ArrowRight'){e.preventDefault();choose('right');}
-  if(e.key===' '){e.preventDefault();if(state==='playing'){paused=!paused;document.getElementById('pauseB').textContent=paused?'▶ ต่อ':'⏸ หยุด';}}
+  if(e.key===' '){
+    e.preventDefault();
+    if(state==='playing'){
+      paused=!paused;
+      document.getElementById('pauseB').textContent=paused?'▶ ต่อ':'⏸ หยุด';
+    }
+  }
 });
+
+// ============================================================
+// BUTTON EVENTS
+// ============================================================
+document.getElementById('startCamBtn').onclick=()=>{
+  playerName=document.getElementById('nameIn').value.trim()||'Player';
+  useCam=true;
+  document.getElementById('startView').style.display='none';
+  startGame();
+};
+document.getElementById('startNoCamBtn').onclick=()=>{
+  playerName=document.getElementById('nameIn').value.trim()||'Player';
+  useCam=false;
+  document.getElementById('startView').style.display='none';
+  startGame();
+};
+document.getElementById('pauseB').onclick=()=>{
+  paused=!paused;
+  document.getElementById('pauseB').textContent=paused?'▶ ต่อ':'⏸ หยุด';
+};
+document.getElementById('reBtn').onclick=()=>{
+  document.getElementById('goView').style.display='none';
+  startGame();
+};
+document.getElementById('homeBtn').onclick=()=>{
+  stopCam();state='idle';clearInterval(tid);cancelAnimationFrame(fid);
+  document.getElementById('goView').style.display='none';
+  document.getElementById('hud').style.display='none';
+  document.getElementById('stats').style.display='none';
+  document.getElementById('progW').style.display='none';
+  document.getElementById('startView').style.display='flex';
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+};
 </script>
 </body>
 </html>

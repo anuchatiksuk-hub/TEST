@@ -325,11 +325,10 @@ class Num{
     ctx.save();
     ctx.shadowBlur=10+pulse*4; ctx.shadowColor='rgba(255,255,255,.2)';
     const gr=ctx.createLinearGradient(ox,oy,ox,oy+this.h);
-    if(this.ok){ gr.addColorStop(0,'rgba(167,139,250,.88)'); gr.addColorStop(1,'rgba(109,40,217,.93)'); }
-    else{ gr.addColorStop(0,'rgba(75,85,99,.82)'); gr.addColorStop(1,'rgba(55,65,81,.9)'); }
+    gr.addColorStop(0,'rgba(75,85,99,.82)'); gr.addColorStop(1,'rgba(55,65,81,.9)');
     ctx.fillStyle=gr; rr(ctx,ox,oy,this.w,this.h,26); ctx.fill();
     ctx.shadowBlur=0;
-    ctx.strokeStyle=this.ok?'rgba(196,181,253,.6)':'rgba(156,163,175,.35)';
+    ctx.strokeStyle='rgba(156,163,175,.35)';
     ctx.lineWidth=1.5; rr(ctx,ox,oy,this.w,this.h,26); ctx.stroke();
     ctx.fillStyle='white';
     const vs=String(this.val).length;

@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>สแกนเก็บคะแนน</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <style>
 :root{--ink:#1d2b3a;--pri:#1f5f5b;--chalk:#f2c14e;--bad:#b3392f;--line:#d9ded8}
 *{box-sizing:border-box}
@@ -16,7 +16,6 @@ input,select,button{font:inherit;padding:9px 10px;border:1px solid #b9c2bb;borde
 button{background:var(--pri);color:#fff;border:0}button.alt{background:#e6ebe6;color:var(--ink)}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0}
 #bar{background:#fff7dc;border-left:5px solid var(--chalk);padding:8px 10px;border-radius:6px;margin:8px 0}
-#reader{width:100%}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;display:none}
 #toast.err{background:var(--bad)}
 .small{font-size:14px;color:#5b6b66}
@@ -34,7 +33,7 @@ button{background:var(--pri);color:#fff;border:0}button.alt{background:#e6ebe6;c
   <div class="card">
     <div class="row"><select id="cls" onchange="loadCls()"></select><select id="unit" onchange="bar()" style="flex:1"></select></div>
     <div id="bar"></div><div id="miss" class="small" hidden></div>
-    <div id="reader"></div>
+    <video id="vid" playsinline muted autoplay style="display:none;width:100%;border-radius:8px;background:#000"></video><canvas id="cv" hidden></canvas>
     <div class="row"><button id="cam" onclick="toggleCam()">เปิดกล้อง</button>
       <label class="small"><input type="checkbox" id="auto"> ส่งแล้ว = ให้เต็มอัตโนมัติ</label></div>
     <div id="camerr" class="small" style="color:var(--bad)" hidden></div>
@@ -54,6 +53,8 @@ button{background:var(--pri);color:#fff;border:0}button.alt{background:#e6ebe6;c
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+addEventListener('error', e => { const b = $('#camerr'); if (b) { b.hidden = false; b.style.color = '#b3392f'; b.textContent = 'ข้อผิดพลาดในหน้า: ' + e.message; } });
+addEventListener('unhandledrejection', e => { const b = $('#camerr'); if (b) { b.hidden = false; b.style.color = '#b3392f'; b.textContent = 'ข้อผิดพลาด: ' + ((e.reason && e.reason.message) || e.reason); } });
 const L = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
 const S = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} };
 function toast(m, err) { const t = $('#toast'); t.textContent = m; t.className = err ? 'err' : ''; t.style.display = 'block';
@@ -66,7 +67,7 @@ async function api(fn, ...args) {
   return j.data;
 }
 function show(loggedIn) { $('#setup').hidden = loggedIn; $('#app').hidden = !loggedIn; }
-function logout(silent) { S('tk', ''); $('#who').textContent = ''; if (scanner) toggleCam(); show(false); if (!silent) toast('ออกจากระบบแล้ว'); }
+function logout(silent) { S('tk', ''); $('#who').textContent = ''; stopCam(); show(false); if (!silent) toast('ออกจากระบบแล้ว'); }
 async function doLogin() {
   const u = $('#url').value.trim() || L('api');
   if (!/^https:\/\/script\.google\.com\/.+\/exec/.test(u)) return toast('ลิงก์ไม่ถูกต้อง ต้องลงท้ายด้วย /exec', 1);
@@ -127,33 +128,49 @@ function saveCur() {
     $('#log').insertAdjacentHTML('afterbegin', `<div>${esc(s.no)}. ${esc(s.firstName)} ${esc(s.lastName)} – ${esc(un.name)}: <b>${esc(r)}</b></div>`);
   });
 }
+let stream = null, raf = 0, tick = 0;
+function stopCam() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; cancelAnimationFrame(raf);
+  const v = $('#vid'); v.srcObject = null; v.style.display = 'none'; $('#cam').textContent = 'เปิดกล้อง';
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && stream) $('#vid').play().catch(() => {}); });
+function loop() {                                     // อ่าน QR จากภาพกล้องทีละเฟรม
+  raf = requestAnimationFrame(loop);
+  const v = $('#vid'), now = performance.now();
+  if (!v.videoWidth || now - tick < 100) return; tick = now;
+  const c = $('#cv'), w = Math.min(800, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth);
+  c.width = w; c.height = h;
+  const g = c.getContext('2d', {willReadFrequently: true}); g.drawImage(v, 0, 0, w, h);
+  const r = jsQR(g.getImageData(0, 0, w, h).data, w, h, {inversionAttempts: 'dontInvert'});
+  if (r && r.data) {
+    if (r.data === lastText && Date.now() - lastScan < 2500) return;   // กันสแกนซ้ำเล่มเดิม
+    lastText = r.data; lastScan = Date.now(); pick(r.data);
+  }
+}
 async function toggleCam() {
-  if (scanner) { try { await scanner.stop(); } catch (e) {} scanner = null; $('#cam').textContent = 'เปิดกล้อง'; return; }
-  const box = $('#camerr'); box.hidden = true;
+  if (stream) return stopCam();
+  const box = $('#camerr');
+  const step = t => { box.hidden = false; box.style.color = '#1d2b3a'; box.textContent = t; };
   const fail = (e, where) => {
-    scanner = null; const n = (e && (e.name || e)) + '', m = (e && e.message) || '';
+    stopCam(); const n = (e && (e.name || e)) + '', m = (e && e.message) || '';
     const tip = /NotAllowed|Permission|denied/i.test(n + m) ? 'ถูกบล็อกสิทธิ์กล้อง → ไปตั้งค่าอนุญาตกล้องให้เบราว์เซอร์/เว็บไซต์นี้ แล้วปิดแท็บเปิดใหม่'
       : /NotReadable|TrackStart|in use/i.test(n + m) ? 'กล้องถูกใช้โดยแอปอื่น → ปิดแอปกล้อง/วิดีโอคอล แล้วลองใหม่'
       : /NotFound|DevicesNotFound/i.test(n + m) ? 'ไม่พบกล้องในเครื่อง'
-      : /Overconstrained/i.test(n + m) ? 'กล้องไม่รองรับค่าที่ขอ → ลองกดใหม่'
       : /Security|insecure/i.test(n + m) ? 'ต้องเปิดผ่านลิงก์ https:// เท่านั้น' : '';
-    box.hidden = false; box.innerHTML = `เปิดกล้องไม่ได้ (${esc(where)}): <b>${esc(n)}</b> ${esc(m)}<br>${esc(tip)}`;
-    $('#cam').textContent = 'เปิดกล้อง';
+    box.hidden = false; box.style.color = '#b3392f';
+    box.innerHTML = `เปิดกล้องไม่ได้ (${esc(where)}): <b>${esc(n)}</b> ${esc(m)}<br>${esc(tip)}<br><small>https=${window.isSecureContext} ในกรอบ=${self !== top} ที่อยู่=${esc(location.origin)}</small>`;
   };
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
     return fail('NoMediaDevices', 'เบราว์เซอร์นี้ไม่รองรับกล้อง หรือเปิดจากในแอป LINE/Facebook — ให้เปิดใน Chrome/Safari');
-  try {                                    // ขั้น 1: ขอสิทธิ์กล้องโดยตรง เพื่อให้เห็นสาเหตุจริง
-    const st = await navigator.mediaDevices.getUserMedia({video: true});
-    st.getTracks().forEach(t => t.stop());
-  } catch (e) { return fail(e, 'ขอสิทธิ์'); }
-  try {                                    // ขั้น 2: เลือกกล้องหลังแล้วสแกนสด
-    const cams = await Html5Qrcode.getCameras();
-    const back = cams.find(c => /back|rear|environment|หลัง/i.test(c.label)) || cams[cams.length - 1];
-    scanner = new Html5Qrcode('reader');
-    await scanner.start(back ? back.id : {facingMode: 'environment'},
-      {fps: 10, qrbox: (w, h) => { const m = Math.floor(Math.min(w, h) * 0.7); return {width: m, height: m}; }},
-      text => { if (text === lastText && Date.now() - lastScan < 2500) return; lastText = text; lastScan = Date.now(); pick(text); });
-    $('#cam').textContent = 'ปิดกล้อง';
-  } catch (e) { fail(e, 'เริ่มสแกน'); }
+  step('กำลังเปิดกล้อง... (ถ้ามีหน้าต่างถามให้กดอนุญาต)');
+  try {
+    stream = await Promise.race([   // ขอกล้องครั้งเดียว (ไม่ขอซ้ำหลายรอบ)
+      navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 720}}}),
+      new Promise((_, no) => setTimeout(() => no(new Error('Timeout: ไม่มีการตอบกลับ — หน้าต่างขออนุญาตกล้องอาจไม่ขึ้น หรือถูกบล็อก')), 12000))]);
+    const v = $('#vid'); v.muted = true; v.setAttribute('playsinline', ''); v.srcObject = stream; v.style.display = 'block';
+    await v.play();
+    box.hidden = true; $('#cam').textContent = 'ปิดกล้อง'; loop();
+  } catch (e) { fail(e, 'เปิดกล้อง'); }
 }
 </script></body></html>

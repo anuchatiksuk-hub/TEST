@@ -3,7 +3,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>สแกนเก็บคะแนน</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>window.jsQR||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"><\/script>')</script>
 <style>
 :root{--ink:#1d2b3a;--pri:#1f5f5b;--chalk:#f2c14e;--bad:#b3392f;--line:#d9ded8}
 *{box-sizing:border-box}
@@ -163,6 +164,7 @@ async function toggleCam() {
   };
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
     return fail('NoMediaDevices', 'เบราว์เซอร์นี้ไม่รองรับกล้อง หรือเปิดจากในแอป LINE/Facebook — ให้เปิดใน Chrome/Safari');
+  if (typeof jsQR === 'undefined') return fail('LibraryNotLoaded', 'โหลดตัวอ่าน QR ไม่สำเร็จ — ตรวจอินเทอร์เน็ตแล้วรีเฟรชหน้า');
   step('กำลังเปิดกล้อง... (ถ้ามีหน้าต่างถามให้กดอนุญาต)');
   try {
     stream = await Promise.race([   // ขอกล้องครั้งเดียว (ไม่ขอซ้ำหลายรอบ)

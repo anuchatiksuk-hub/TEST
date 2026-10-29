@@ -21,7 +21,7 @@ button{background:var(--pri);color:#fff;border:0}button.alt{background:#e6ebe6;c
 #toast.err{background:var(--bad)}
 .small{font-size:14px;color:#5b6b66}
 </style></head><body>
-<header><b>สแกนเก็บคะแนน</b><span id="who"></span></header>
+<header><b>สแกนเก็บคะแนน</b><span><span id="who"></span> <a id="back" target="_blank">ระบบหลัก</a></span></header>
 <main>
 <div class="card" id="setup" hidden>
   <b>ตั้งค่าครั้งแรก</b>
@@ -37,6 +37,7 @@ button{background:var(--pri);color:#fff;border:0}button.alt{background:#e6ebe6;c
     <div id="reader"></div>
     <div class="row"><button id="cam" onclick="toggleCam()">เปิดกล้อง</button>
       <label class="small"><input type="checkbox" id="auto"> ส่งแล้ว = ให้เต็มอัตโนมัติ</label></div>
+    <div id="camerr" class="small" style="color:var(--bad)" hidden></div>
     <div class="row"><input id="manual" placeholder="หรือพิมพ์/ยิงเลขประจำตัว แล้ว Enter" style="flex:1"
       onkeydown="if(event.key==='Enter'){pick(this.value.trim());this.value=''}"></div>
   </div>
@@ -72,9 +73,11 @@ async function doLogin() {
   S('api', u);
   try { const r = await api('login', $('#lu').value, $('#lp').value); S('tk', r.token); start(r.me); } catch (e) {}
 }
-function start(me) { $('#who').textContent = me.name; show(true);
+function start(me) { $('#who').textContent = me.name; $('#back').href = L('api'); show(true);
   api('getClasses').then(cs => { $('#cls').innerHTML = cs.map(c => `<option>${esc(c)}</option>`).join(''); loadCls(); }); }
 addEventListener('load', () => {
+  const h = new URLSearchParams(location.hash.slice(1));      // มาจากเมนู "สแกนสด" ในระบบหลัก: รับลิงก์ระบบ+โทเคนอัตโนมัติ
+  if (h.get('api')) { S('api', h.get('api')); if (h.get('tk')) S('tk', h.get('tk')); history.replaceState(null, '', location.pathname + location.search); }
   $('#url').value = L('api'); show(false); $('#setup').hidden = false;
   if (L('api') && L('tk')) api('getMe').then(start).catch(() => { $('#setup').hidden = false; });
 });
@@ -124,13 +127,33 @@ function saveCur() {
     $('#log').insertAdjacentHTML('afterbegin', `<div>${esc(s.no)}. ${esc(s.firstName)} ${esc(s.lastName)} – ${esc(un.name)}: <b>${esc(r)}</b></div>`);
   });
 }
-function toggleCam() {
-  if (scanner) { scanner.stop().then(() => { scanner = null; $('#cam').textContent = 'เปิดกล้อง'; }); return; }
-  scanner = new Html5Qrcode('reader');
-  scanner.start({facingMode: 'environment'}, {fps: 10, qrbox: 240}, text => {
-    if (text === lastText && Date.now() - lastScan < 2500) return;   // กันสแกนซ้ำเล่มเดิม
-    lastText = text; lastScan = Date.now(); pick(text);
-  }).then(() => $('#cam').textContent = 'ปิดกล้อง')
-    .catch(e => { scanner = null; toast('เปิดกล้องไม่ได้ — ตรวจสิทธิ์กล้อง และเปิดด้วย Chrome/Safari', 1); });
+async function toggleCam() {
+  if (scanner) { try { await scanner.stop(); } catch (e) {} scanner = null; $('#cam').textContent = 'เปิดกล้อง'; return; }
+  const box = $('#camerr'); box.hidden = true;
+  const fail = (e, where) => {
+    scanner = null; const n = (e && (e.name || e)) + '', m = (e && e.message) || '';
+    const tip = /NotAllowed|Permission|denied/i.test(n + m) ? 'ถูกบล็อกสิทธิ์กล้อง → ไปตั้งค่าอนุญาตกล้องให้เบราว์เซอร์/เว็บไซต์นี้ แล้วปิดแท็บเปิดใหม่'
+      : /NotReadable|TrackStart|in use/i.test(n + m) ? 'กล้องถูกใช้โดยแอปอื่น → ปิดแอปกล้อง/วิดีโอคอล แล้วลองใหม่'
+      : /NotFound|DevicesNotFound/i.test(n + m) ? 'ไม่พบกล้องในเครื่อง'
+      : /Overconstrained/i.test(n + m) ? 'กล้องไม่รองรับค่าที่ขอ → ลองกดใหม่'
+      : /Security|insecure/i.test(n + m) ? 'ต้องเปิดผ่านลิงก์ https:// เท่านั้น' : '';
+    box.hidden = false; box.innerHTML = `เปิดกล้องไม่ได้ (${esc(where)}): <b>${esc(n)}</b> ${esc(m)}<br>${esc(tip)}`;
+    $('#cam').textContent = 'เปิดกล้อง';
+  };
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+    return fail('NoMediaDevices', 'เบราว์เซอร์นี้ไม่รองรับกล้อง หรือเปิดจากในแอป LINE/Facebook — ให้เปิดใน Chrome/Safari');
+  try {                                    // ขั้น 1: ขอสิทธิ์กล้องโดยตรง เพื่อให้เห็นสาเหตุจริง
+    const st = await navigator.mediaDevices.getUserMedia({video: true});
+    st.getTracks().forEach(t => t.stop());
+  } catch (e) { return fail(e, 'ขอสิทธิ์'); }
+  try {                                    // ขั้น 2: เลือกกล้องหลังแล้วสแกนสด
+    const cams = await Html5Qrcode.getCameras();
+    const back = cams.find(c => /back|rear|environment|หลัง/i.test(c.label)) || cams[cams.length - 1];
+    scanner = new Html5Qrcode('reader');
+    await scanner.start(back ? back.id : {facingMode: 'environment'},
+      {fps: 10, qrbox: (w, h) => { const m = Math.floor(Math.min(w, h) * 0.7); return {width: m, height: m}; }},
+      text => { if (text === lastText && Date.now() - lastScan < 2500) return; lastText = text; lastScan = Date.now(); pick(text); });
+    $('#cam').textContent = 'ปิดกล้อง';
+  } catch (e) { fail(e, 'เริ่มสแกน'); }
 }
 </script></body></html>
